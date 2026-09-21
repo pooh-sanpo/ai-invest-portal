@@ -61,8 +61,9 @@
       <div class="sub" id="sub">SBI S株カレンダー · 元手3万円 · 2026-09-24開始</div>
     </div>
     <div>
-      <input id="stockSearch" type="search" placeholder="銘柄名・コードで検索" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:6px 10px;width:240px">
+      <input id="stockSearch" type="search" placeholder="銘柄名・コードで検索" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:6px 10px;width:220px">
       <button id="btnReload" type="button" style="margin-left:8px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:6px 10px;cursor:pointer">更新</button>
+      <button id="btnRun" type="button" style="margin-left:6px;background:#059669;border:1px solid #047857;color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:600">再走査</button>
       <div id="searchResults" style="display:none;position:absolute;right:24px;top:58px;width:360px;max-height:320px;overflow:auto;background:#0f172a;border:1px solid #334155;border-radius:10px;z-index:20"></div>
     </div>
   </header>
@@ -279,6 +280,27 @@
       st = setTimeout(() => runLocalSearch(e.target.value), 160);
     });
     document.getElementById("btnReload").onclick = () => location.reload();
+    document.getElementById("btnRun").onclick = async () => {
+      const btn = document.getElementById("btnRun");
+      btn.textContent = "走査中…";
+      const urls = ["/api/run", "http://127.0.0.1:8771/api/run"];
+      for (const url of urls) {
+        try {
+          const r = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({})
+          });
+          if (r.ok || r.status === 202) {
+            btn.textContent = "受付済み";
+            setTimeout(() => { btn.textContent = "再走査"; location.reload(); }, 4000);
+            return;
+          }
+        } catch (e) {}
+      }
+      btn.textContent = "再走査";
+      window.open("http://127.0.0.1:8771/", "_blank");
+    };
   </script>
 </body>
 </html>
