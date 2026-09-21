@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5エージェント自動投資</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #020617;
+      color: #e2e8f0;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+    header {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 24px; border-bottom: 1px solid #1e293b; background: #020617ee;
+    }
+    h1 { font-size: 16px; margin: 0; }
+    .sub { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    .badge {
+      font-size: 11px; padding: 4px 10px; border-radius: 999px;
+      border: 1px solid #334155; color: #86efac; background: #022c22;
+    }
+    main { max-width: 1120px; margin: 0 auto; padding: 24px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .card {
+      background: #0f172a; border: 1px solid #1e293b; border-radius: 14px; padding: 16px;
+    }
+    .label { font-size: 12px; color: #94a3b8; }
+    .value { font-size: 26px; font-weight: 700; font-family: ui-monospace, monospace; margin-top: 6px; }
+    .agents { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 20px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; margin-bottom: 8px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; color: #94a3b8; font-weight: 500; padding: 8px 0; }
+    td { padding: 10px 0; border-top: 1px solid #1e293b; vertical-align: top; }
+    .pos { color: #34d399; }
+    .neg { color: #fb7185; }
+    .muted { color: #94a3b8; font-size: 11px; }
+    h2 { font-size: 14px; margin: 0 0 12px; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #1e293b; font-size: 13px; }
+    @media (max-width: 900px) {
+      .kpis, .agents, .grid2 { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .kpis, .agents, .grid2 { grid-template-columns: 1fr; }
+      header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>5エージェント自動投資</h1>
+      <div class="sub">ペーパー専用 · 実発注なし · スナップショット</div>
+    </div>
+    <span class="badge" id="chip">Artifact</span>
+  </header>
+  <main>
+    <section class="kpis">
+      <article class="card"><div class="label">時価総額</div><div class="value" id="equity">-</div></article>
+      <article class="card"><div class="label">現金</div><div class="value" id="cash">-</div></article>
+      <article class="card"><div class="label">保有</div><div class="value" id="posCount">-</div></article>
+      <article class="card"><div class="label">地合い / 最終実行</div><div class="value" id="regime" style="font-size:20px">-</div><div class="muted" id="ranAt"></div></article>
+    </section>
+    <h2 style="margin-top:24px">5人のエージェント</h2>
+    <section class="agents" id="agents"></section>
+    <section class="grid2">
+      <article class="card">
+        <h2>保有ポジション</h2>
+        <table><thead><tr><th>銘柄</th><th>株数</th><th>取得</th><th>現在</th><th>損益</th></tr></thead><tbody id="posBody"></tbody></table>
+      </article>
+      <article class="card">
+        <h2>直近の約定（ペーパー）</h2>
+        <ul id="fills"></ul>
+      </article>
+    </section>
+    <article class="card" style="margin-top:12px">
+      <h2>テクニカル順位</h2>
+      <table>
+        <thead><tr><th>銘柄</th><th>価格</th><th>前日比</th><th>スコア</th><th>強気票</th><th>根拠</th></tr></thead>
+        <tbody id="candBody"></tbody>
+      </table>
+    </article>
+  </main>
+  <script>
+    window.STATE = {"equity": 37153.6, "last_run": {"ran_at": "2026-09-21 18:19:30", "source": "yfinance", "mode": "paper", "apply_trades": true, "equity": 37153.6, "agents": [{"id": "macro", "name": "マクロアナリスト", "source": "03_investment/03_agents/macro_analyst.py", "summary": "地合い=neutral。平均前日比 +0.92%、上昇トレンド比率 50%、平均RSI 49.9。"}, {"id": "technical", "name": "テクニカルアナリスト", "source": "03_investment/03_agents/technical_analyst.py", "summary": "監視12銘柄中、スコア50以上は7件。首位は KDDI。"}, {"id": "bull", "name": "強気派", "source": "03_investment/03_agents/claude_decision_agent.py", "summary": "強気派承認 7/7 件（high=4）。"}, {"id": "risk", "name": "リスクマネージャー", "source": "03_investment/03_agents/risk_manager.py", "summary": "売却3件 / 新規買い0件。スロット予定 1/4。"}, {"id": "executor", "name": "執行エージェント", "source": "03_investment/main.py", "summary": "ペーパー執行: 約定3件。現金 31,103円 / 保有 1件。"}], "macro": {"regime": "neutral", "summary": "地合い=neutral。平均前日比 +0.92%、上昇トレンド比率 50%、平均RSI 49.9。", "breadth": 0.5, "avg_change": 0.922, "avg_rsi": 49.88}, "technical": {"summary": "監視12銘柄中、スコア50以上は7件。首位は KDDI。", "candidates": [{"code": "9433.T", "name": "KDDI", "current_price": 3060.0, "change_pct": -1.58, "score": 100, "reasons": ["出来高急増(1.9倍)", "SMA5>25の上昇トレンド", "RSI健全圏(63.56)"]}, {"code": "6920.T", "name": "レーザーテック", "current_price": 39090.0, "change_pct": 8.7, "score": 100, "reasons": ["出来高急増(1.6倍)", "SMA5>25の上昇トレンド", "RSI健全圏(69.34)"]}, {"code": "6501.T", "name": "日立製作所", "current_price": 5524.0, "change_pct": 0.89, "score": 100, "reasons": ["出来高急増(1.7倍)", "SMA5>25の上昇トレンド", "RSI健全圏(53.86)"]}, {"code": "9432.T", "name": "NTT", "current_price": 177.3, "change_pct": -1.5, "score": 80, "reasons": ["出来高微増", "SMA5>25の上昇トレンド", "RSI健全圏(59.16)"]}, {"code": "6981.T", "name": "村田製作所", "current_price": 7763.0, "change_pct": 4.47, "score": 60, "reasons": ["SMA5>25の上昇トレンド", "RSI健全圏(57.81)"]}, {"code": "8306.T", "name": "三菱UFJ", "current_price": 3620.0, "change_pct": -0.88, "score": 50, "reasons": ["出来高微増", "SMA5>25の上昇トレンド"]}, {"code": "2914.T", "name": "JT", "current_price": 6886.0, "change_pct": -0.43, "score": 50, "reasons": ["出来高微増", "RSI健全圏(47.29)"]}, {"code": "7203.T", "name": "トヨタ自動車", "current_price": 3025.0, "change_pct": -0.3, "score": 40, "reasons": ["出来高急増(2.0倍)"]}, {"code": "8267.T", "name": "イオン", "current_price": 1313.5, "change_pct": -2.56, "score": 40, "reasons": ["出来高急増(1.7倍)"]}, {"code": "7011.T", "name": "三菱重工業", "current_price": 3879.0, "change_pct": -0.21, "score": 30, "reasons": ["RSI健全圏(49.5)"]}, {"code": "6857.T", "name": "アドバンテスト", "current_price": 32050.0, "change_pct": 5.99, "score": 20, "reasons": ["出来高微増"]}, {"code": "6758.T", "name": "ソニーグループ", "current_price": 3697.0, "change_pct": -1.52, "score": 0, "reasons": []}]}, "bull": {"summary": "強気派承認 7/7 件（high=4）。", "votes": {"9433.T": "high", "6920.T": "high", "6501.T": "high", "9432.T": "high", "6981.T": "medium", "8306.T": "medium", "2914.T": "medium"}}, "risk": {"summary": "売却3件 / 新規買い0件。スロット予定 1/4。", "sell_signals": [{"code": "9432.T", "name": "NTT", "shares": 52, "reason": "利確ライン到達 (16.6%)", "action": "SELL_ALL"}, {"code": "7011.T", "name": "三菱重工業", "shares": 2, "reason": "利確ライン到達 (44.7%)", "action": "SELL_ALL"}, {"code": "8306.T", "name": "三菱UFJ", "shares": 3, "reason": "利確ライン到達 (50.2%)", "action": "SELL_ALL"}], "buy_signals": [], "veto": null}, "executor": {"summary": "ペーパー執行: 約定3件。現金 31,103円 / 保有 1件。", "fills": [{"side": "SELL", "code": "9432.T", "name": "NTT", "buy_date": "2026-09-21", "sell_date": "2026-09-21", "buy_price": 152.0, "sell_price": 177.3, "shares": 52, "invested": 7904.0, "revenue": 9219.6, "profit": 1315.6, "reason": "利確ライン到達 (16.6%)", "mode": "paper"}, {"side": "SELL", "code": "7011.T", "name": "三菱重工業", "buy_date": "2026-09-21", "sell_date": "2026-09-21", "buy_price": 2680.0, "sell_price": 3879.0, "shares": 2, "invested": 5360.0, "revenue": 7758.0, "profit": 2398.0, "reason": "利確ライン到達 (44.7%)", "mode": "paper"}, {"side": "SELL", "code": "8306.T", "name": "三菱UFJ", "buy_date": "2026-09-21", "sell_date": "2026-09-21", "buy_price": 2410.0, "sell_price": 3620.0, "shares": 3, "invested": 7230.0, "revenue": 10860.0, "profit": 3630.0, "reason": "利確ライン到達 (50.2%)", "mode": "paper"}], "mode": "paper"}, "portfolio": {"cash_balance": 31103.6, "positions": [{"code": "7203.T", "name": "トヨタ自動車", "shares": 2, "buy_price": 3120.0, "current_price": 3025.0, "buy_date": "2026-09-21"}], "trade_history": [{"code": "9432.T", "name": "NTT", "buy_date": "2026-09-21", "sell_date": "2026-09-21", "buy_price": 152.0, "sell_price": 177.3, "shares": 52, "invested": 7904.0, "revenue": 9219.6, "profit": 1315.6, "reason": "利確ライン到達 (16.6%)", "mode": "paper"}, {"code": "7011.T", "name": "三菱重工業", "buy_date": "2026-09-21", "sell_date": "2026-09-21", "buy_price": 2680.0, "sell_price": 3879.0, "shares": 2, "invested": 5360.0, "revenue": 7758.0, "profit": 2398.0, "reason": "利確ライン到達 (44.7%)", "mode": "paper"}, {"code": "8306.T", "name": "三菱UFJ", "buy_date": "2026-09-21", "sell_date": "2026-09-21", "buy_price": 2410.0, "sell_price": 3620.0, "shares": 3, "invested": 7230.0, "revenue": 10860.0, "profit": 3630.0, "reason": "利確ライン到達 (50.2%)", "mode": "paper"}], "start_date": "2026-09-21"}}, "portfolio": {"cash_balance": 31103.6, "positions": [{"code": "7203.T", "name": "トヨタ自動車", "shares": 2, "buy_price": 3120.0, "current_price": 3025.0, "buy_date": "2026-09-21"}], "trade_history": [{"code": "9432.T", "name": "NTT", "buy_date": "2026-09-21", "sell_date": "2026-09-21", "buy_price": 152.0, "sell_price": 177.3, "shares": 52, "invested": 7904.0, "revenue": 9219.6, "profit": 1315.6, "reason": "利確ライン到達 (16.6%)", "mode": "paper"}, {"code": "7011.T", "name": "三菱重工業", "buy_date": "2026-09-21", "sell_date": "2026-09-21", "buy_price": 2680.0, "sell_price": 3879.0, "shares": 2, "invested": 5360.0, "revenue": 7758.0, "profit": 2398.0, "reason": "利確ライン到達 (44.7%)", "mode": "paper"}, {"code": "8306.T", "name": "三菱UFJ", "buy_date": "2026-09-21", "sell_date": "2026-09-21", "buy_price": 2410.0, "sell_price": 3620.0, "shares": 3, "invested": 7230.0, "revenue": 10860.0, "profit": 3630.0, "reason": "利確ライン到達 (50.2%)", "mode": "paper"}], "start_date": "2026-09-21"}};
+    const yen = (n) => (n == null || n === "") ? "-" : Math.round(n).toLocaleString("ja-JP") + "円";
+    const META = [
+      { id: "macro", name: "マクロアナリスト", color: "#38bdf8" },
+      { id: "technical", name: "テクニカルアナリスト", color: "#a78bfa" },
+      { id: "bull", name: "強気派", color: "#f59e0b" },
+      { id: "risk", name: "リスクマネージャー", color: "#f43f5e" },
+      { id: "executor", name: "執行エージェント", color: "#34d399" }
+    ];
+    const last = window.STATE.last_run || {};
+    const p = window.STATE.portfolio || {};
+    document.getElementById("equity").textContent = yen(window.STATE.equity);
+    document.getElementById("cash").textContent = yen(p.cash_balance);
+    document.getElementById("posCount").textContent = ((p.positions || []).length) + " / 4";
+    document.getElementById("regime").textContent = (last.macro && last.macro.regime) || "-";
+    document.getElementById("ranAt").textContent = last.ran_at || "未実行";
+    const summaries = {};
+    (last.agents || []).forEach(a => summaries[a.id] = a.summary);
+    document.getElementById("agents").innerHTML = META.map(a =>
+      `<div class="card"><div class="dot" style="background:${a.color}"></div><div style="font-weight:600;font-size:13px">${a.name}</div><div class="muted" style="margin:8px 0 0;line-height:1.5">${summaries[a.id] || "未実行"}</div></div>`
+    ).join("");
+    const positions = p.positions || [];
+    document.getElementById("posBody").innerHTML = positions.length ? positions.map(pos => {
+      const pnl = (pos.current_price - pos.buy_price) * pos.shares;
+      const cls = pnl >= 0 ? "pos" : "neg";
+      return `<tr><td>${pos.name}<div class="muted">${pos.code}</div></td><td>${pos.shares}</td><td>${yen(pos.buy_price)}</td><td>${yen(pos.current_price)}</td><td class="${cls}">${yen(pnl)}</td></tr>`;
+    }).join("") : `<tr><td colspan="5" class="muted">保有なし</td></tr>`;
+    const fills = (last.executor && last.executor.fills && last.executor.fills.length)
+      ? last.executor.fills
+      : (p.trade_history || []).map(t => ({ side: "SELL", ...t }));
+    document.getElementById("fills").innerHTML = fills.length ? fills.map(f => {
+      const side = f.side === "BUY" ? "買" : "売";
+      const extra = f.profit != null ? yen(f.profit) : (f.reason || "paper");
+      return `<li><span>${side} ${f.name || f.code} × ${f.shares}</span><span class="muted">${extra}</span></li>`;
+    }).join("") : `<li class="muted">約定なし</li>`;
+    const votes = (last.bull && last.bull.votes) || {};
+    const cands = (last.technical && last.technical.candidates) || [];
+    document.getElementById("candBody").innerHTML = cands.length ? cands.map(c => {
+      const sign = c.change_pct >= 0 ? "+" : "";
+      return `<tr><td>${c.name}<div class="muted">${c.code}</div></td><td>${yen(c.current_price)}</td><td>${sign}${c.change_pct}%</td><td>${c.score}</td><td>${votes[c.code] || "-"}</td><td class="muted">${(c.reasons || []).join(" / ")}</td></tr>`;
+    }).join("") : `<tr><td colspan="6" class="muted">未実行</td></tr>`;
+  </script>
+</body>
+</html>
