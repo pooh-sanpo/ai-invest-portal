@@ -97,15 +97,35 @@
         </div>
         <div>
           <h2>X分析</h2>
+          <select id="xThemeFilter" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:4px 8px;margin-bottom:8px">
+            <option value="">テーマすべて</option>
+          </select>
           <p id="intelX"></p>
           <ul id="intelXItems"></ul>
         </div>
       </section>
     </article>
     <article class="card" style="margin-top:12px">
-      <h2>テクニカル順位</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2>テクニカル順位</h2>
+        <label class="muted">業種
+          <select id="sectorFilter" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:4px 8px">
+            <option value="">すべて</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted" id="candCount"></p>
       <table>
-        <thead><tr><th>銘柄</th><th>価格</th><th>前日比</th><th>スコア</th><th>強気票</th><th>根拠</th></tr></thead>
+        <thead><tr>
+          <th data-sort="name" style="cursor:pointer">銘柄</th>
+          <th>業種</th>
+          <th data-sort="price" style="cursor:pointer">価格</th>
+          <th data-sort="change" style="cursor:pointer">前日比</th>
+          <th data-sort="score" style="cursor:pointer">スコア</th>
+          <th data-sort="vote" style="cursor:pointer">強気票</th>
+          <th data-sort="x" style="cursor:pointer">X</th>
+          <th>根拠</th>
+        </tr></thead>
         <tbody id="candBody"></tbody>
       </table>
     </article>
@@ -161,10 +181,42 @@
     }).join("") : `<li class="muted">約定なし</li>`;
     const votes = (last.bull && last.bull.votes) || {};
     const cands = (last.technical && last.technical.candidates) || [];
-    document.getElementById("candBody").innerHTML = cands.length ? cands.map(c => {
-      const sign = c.change_pct >= 0 ? "+" : "";
-      return `<tr><td>${ylink(c.code, c.name, c.yahoo_url)}<div class="muted">${c.code}</div></td><td>${yen(c.current_price)}</td><td>${sign}${c.change_pct}%</td><td>${c.score}</td><td>${votes[c.code] || "-"}</td><td class="muted">${(c.reasons || []).join(" / ")}</td></tr>`;
-    }).join("") : `<tr><td colspan="6" class="muted">未実行</td></tr>`;
+    const voteRank = { high: 3, medium: 2, low: 1 };
+    let sortKey = "score";
+    let sortDir = -1;
+    const secSel = document.getElementById("sectorFilter");
+    const sectors = [...new Set(cands.map(c => c.sector).filter(Boolean))].sort();
+    secSel.innerHTML = '<option value="">すべて</option>' + sectors.map(s => `<option value="${s}">${s}</option>`).join("");
+    const paintCands = () => {
+      const sector = secSel.value;
+      let rows = cands.filter(c => !sector || c.sector === sector);
+      rows = rows.slice().sort((a, b) => {
+        const pick = (c) => sortKey === "name" ? (c.name || "") :
+          sortKey === "price" ? (c.current_price || 0) :
+          sortKey === "change" ? (c.change_pct || 0) :
+          sortKey === "vote" ? (voteRank[votes[c.code]] || 0) :
+          sortKey === "x" ? (c.x_bonus || 0) : (c.score || 0);
+        const av = pick(a), bv = pick(b);
+        if (av < bv) return -1 * sortDir;
+        if (av > bv) return 1 * sortDir;
+        return 0;
+      });
+      document.getElementById("candCount").textContent = rows.length + "件";
+      document.getElementById("candBody").innerHTML = rows.length ? rows.map(c => {
+        const sign = c.change_pct >= 0 ? "+" : "";
+        return `<tr><td>${ylink(c.code, c.name, c.yahoo_url)}<div class="muted">${c.code}</div></td><td class="muted">${c.sector || "-"}</td><td>${yen(c.current_price)}</td><td>${sign}${c.change_pct}%</td><td>${c.score}</td><td>${votes[c.code] || "-"}</td><td>${c.x_bonus ? (c.x_bonus + "pt") : "-"}</td><td class="muted">${(c.reasons || []).join(" / ")}</td></tr>`;
+      }).join("") : `<tr><td colspan="8" class="muted">該当なし</td></tr>`;
+    };
+    secSel.onchange = paintCands;
+    document.querySelectorAll("th[data-sort]").forEach(th => {
+      th.onclick = () => {
+        const k = th.getAttribute("data-sort");
+        if (sortKey === k) sortDir *= -1;
+        else { sortKey = k; sortDir = k === "name" ? 1 : -1; }
+        paintCands();
+      };
+    });
+    paintCands();
     const days = window.STATE.intel_history || [];
     const intelDates = document.getElementById("intelDates");
     if (!days.length) {
@@ -184,9 +236,16 @@
           `<li><span>${ylink(c.code, c.name, c.yahoo_url)}</span><span class="muted">${c.score}点</span></li>`
         ).join("") || "<li class='muted'>なし</li>";
         document.getElementById("intelX").textContent = x.summary || "";
-        document.getElementById("intelXItems").innerHTML = (x.items || []).slice(0, 12).map(it =>
+        const themeSel = document.getElementById("xThemeFilter");
+        const keep = themeSel.value;
+        const themes = (x.themes || []).map(t => t.theme);
+        themeSel.innerHTML = '<option value="">テーマすべて</option>' + themes.map(t => `<option value="${t}">${t}</option>`).join("");
+        if ([...themeSel.options].some(o => o.value === keep)) themeSel.value = keep;
+        const theme = themeSel.value;
+        const xitems = (x.items || []).filter(it => !theme || it.theme === theme);
+        document.getElementById("intelXItems").innerHTML = xitems.length ? xitems.map(it =>
           `<li><span>${ylink(it.code, it.name, it.yahoo_url)}</span><span class="muted">${it.theme} · ${it.count}件</span></li>`
-        ).join("") || "<li class='muted'>なし</li>";
+        ).join("") : "<li class='muted'>なし</li>";
       };
       intelDates.onclick = (e) => {
         const b = e.target.closest("button[data-day]");
@@ -195,6 +254,7 @@
         paint();
       };
       paint();
+      document.getElementById("xThemeFilter").onchange = paint;
     }
     const idx = window.STATE.search_index || [];
     const box = document.getElementById("searchResults");
