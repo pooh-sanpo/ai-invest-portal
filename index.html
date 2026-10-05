@@ -82,13 +82,24 @@
         <table><thead><tr><th>銘柄</th><th>株数</th><th>取得</th><th>現在</th><th>損益</th></tr></thead><tbody id="posBody"></tbody></table>
       </article>
       <article class="card">
-        <h2>直近の約定（ペーパー）</h2>
-        <ul id="fills"></ul>
+        <h2>購入履歴 <span class="muted" id="buyCount"></span></h2>
+        <div style="overflow:auto;max-height:32rem">
+          <table>
+            <thead><tr><th>日時</th><th>売買</th><th>銘柄</th><th>株数</th><th>値段</th><th>状態</th></tr></thead>
+            <tbody id="buyBody"></tbody>
+          </table>
+        </div>
       </article>
     </section>
     <article class="card" style="margin-top:12px">
-      <h2>日次の情報収集 / X分析</h2>
-      <div id="intelDates" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0"></div>
+      <h2>検討履歴 <span class="muted" id="reviewCount"></span></h2>
+      <div style="overflow:auto;max-height:24rem">
+        <table>
+          <thead><tr><th>実行</th><th>枠</th><th>検討</th><th>結果</th></tr></thead>
+          <tbody id="reviewBody"></tbody>
+        </table>
+      </div>
+      <div id="intelDates" style="display:none"></div>
       <p class="muted" id="intelSummary"></p>
       <section class="grid2" style="margin-top:8px">
         <div>
@@ -172,14 +183,23 @@
       const cls = pnl >= 0 ? "pos" : "neg";
       return `<tr><td>${ylink(pos.code, pos.name, pos.yahoo_url)}<div class="muted">${pos.code}</div></td><td>${pos.shares}</td><td>${yen(pos.buy_price)}</td><td>${yen(pos.current_price)}</td><td class="${cls}">${yen(pnl)}</td></tr>`;
     }).join("") : `<tr><td colspan="5" class="muted">保有なし</td></tr>`;
-    const fills = (last.executor && last.executor.fills && last.executor.fills.length)
-      ? last.executor.fills
-      : (p.trade_history || []).map(t => ({ side: "SELL", ...t }));
-    document.getElementById("fills").innerHTML = fills.length ? fills.map(f => {
-      const side = f.side === "BUY" ? "買" : "売";
-      const extra = f.profit != null ? yen(f.profit) : (f.reason || "paper");
-      return `<li><span>${side} ${ylink(f.code, f.name, f.yahoo_url)} × ${f.shares}</span><span class="muted">${extra}</span></li>`;
-    }).join("") : `<li class="muted">約定なし</li>`;
+    const purchaseRows = [];
+    (p.positions || []).forEach(pos => {
+      purchaseRows.push({ at: pos.fill_at || pos.buy_date || "", side: "買", code: pos.code, name: pos.name, yahoo_url: pos.yahoo_url, shares: pos.shares, price: pos.buy_price, state: "保有中" });
+    });
+    (p.trade_history || []).forEach(t => {
+      purchaseRows.push({ at: t.buy_date || "", side: "買", code: t.code, name: t.name, yahoo_url: t.yahoo_url, shares: t.shares, price: t.buy_price, state: "売却済み" });
+      purchaseRows.push({ at: t.fill_at || t.sell_date || "", side: "売", code: t.code, name: t.name, yahoo_url: t.yahoo_url, shares: t.shares, price: t.sell_price, state: "売却済み" + (t.profit == null ? "" : (" " + yen(t.profit))) });
+    });
+    (p.pending_orders || []).forEach(o => {
+      const buy = o.side === "BUY";
+      purchaseRows.push({ at: o.fill_at || "", side: buy ? "買" : "売", code: o.code, name: o.name, yahoo_url: o.yahoo_url, shares: o.shares, price: o.price, state: "予約" + (o.label ? (" " + o.label) : "") });
+    });
+    purchaseRows.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    document.getElementById("buyCount").textContent = "全" + purchaseRows.length + "件";
+    document.getElementById("buyBody").innerHTML = purchaseRows.length ? purchaseRows.map(r =>
+      `<tr><td>${r.at || "-"}</td><td>${r.side}</td><td>${ylink(r.code, r.name, r.yahoo_url)}<div class="muted">${r.code || ""}</div></td><td>${r.shares ?? "-"}</td><td>${yen(r.price)}</td><td class="muted">${r.state}</td></tr>`
+    ).join("") : `<tr><td colspan="6" class="muted">購入履歴なし</td></tr>`;
     const votes = (last.bull && last.bull.votes) || {};
     const cands = (last.technical && last.technical.candidates) || [];
     const voteRank = { high: 3, medium: 2, low: 1 };
@@ -219,44 +239,55 @@
     });
     paintCands();
     const days = window.STATE.intel_history || [];
-    const intelDates = document.getElementById("intelDates");
-    if (!days.length) {
-      document.getElementById("intelSummary").textContent = "履歴なし";
-    } else {
-      let sel = days[0].date;
-      const paint = () => {
-        intelDates.innerHTML = days.slice(0, 14).map(d =>
-          `<button data-day="${d.date}" style="background:${d.date===sel?'#0284c7':'#1e293b'};color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:4px 8px;cursor:pointer">${d.date.slice(5)}</button>`
-        ).join("");
-        const day = days.find(d => d.date === sel) || days[0];
-        const m = day.market || {};
-        const x = day.x || {};
-        document.getElementById("intelSummary").textContent = (day.date + " " + (x.summary || m.summary || ""));
-        document.getElementById("intelMarket").textContent = `地合い ${m.regime || "-"} · 走査 ${m.universe || "-"}銘柄`;
-        document.getElementById("intelTop").innerHTML = (m.top_candidates || []).map(c =>
-          `<li><span>${ylink(c.code, c.name, c.yahoo_url)}</span><span class="muted">${c.score}点</span></li>`
-        ).join("") || "<li class='muted'>なし</li>";
-        document.getElementById("intelX").textContent = x.summary || "";
-        const themeSel = document.getElementById("xThemeFilter");
-        const keep = themeSel.value;
-        const themes = (x.themes || []).map(t => t.theme);
-        themeSel.innerHTML = '<option value="">テーマすべて</option>' + themes.map(t => `<option value="${t}">${t}</option>`).join("");
-        if ([...themeSel.options].some(o => o.value === keep)) themeSel.value = keep;
-        const theme = themeSel.value;
-        const xitems = (x.items || []).filter(it => !theme || it.theme === theme);
-        document.getElementById("intelXItems").innerHTML = xitems.length ? xitems.map(it =>
-          `<li><span>${ylink(it.code, it.name, it.yahoo_url)}</span><span class="muted">${it.theme} · ${it.count}件</span></li>`
-        ).join("") : "<li class='muted'>なし</li>";
-      };
-      intelDates.onclick = (e) => {
-        const b = e.target.closest("button[data-day]");
-        if (!b) return;
-        sel = b.getAttribute("data-day");
-        paint();
-      };
+    document.getElementById("reviewCount").textContent = "全" + days.length + "件";
+    const reviewBody = document.getElementById("reviewBody");
+    let sel = days.length ? (days[0].updated_at || days[0].date) : "";
+    const paint = () => {
+      if (!days.length) {
+        reviewBody.innerHTML = `<tr><td colspan="4" class="muted">検討履歴なし</td></tr>`;
+        document.getElementById("intelSummary").textContent = "履歴なし";
+        document.getElementById("intelTop").innerHTML = "";
+        document.getElementById("intelXItems").innerHTML = "";
+        return;
+      }
+      reviewBody.innerHTML = days.map(d => {
+        const id = d.updated_at || d.date;
+        const session = d.session || {};
+        const analysis = d.analysis || {};
+        const reviewed = (d.review && d.review.length) || (d.market && d.market.reviewed) || ((d.market || {}).top_candidates || []).length;
+        const bg = id === sel ? "#1e293b" : "transparent";
+        return `<tr data-day="${id}" style="background:${bg};cursor:pointer"><td>${id}</td><td>${session.label || "-"} ${session.fill_at || ""}</td><td>${analysis.technical || (d.market || {}).summary || "-"}</td><td class="muted">${analysis.risk || ""} ${analysis.executor || ""} / 候補${reviewed}件</td></tr>`;
+      }).join("");
+      const day = days.find(d => (d.updated_at || d.date) === sel) || days[0];
+      const m = day.market || {};
+      const x = day.x || {};
+      const analysis = day.analysis || {};
+      document.getElementById("intelSummary").textContent = ((day.updated_at || day.date) + " " + [analysis.macro, analysis.bull, analysis.risk, analysis.executor, x.summary].filter(Boolean).join(" "));
+      document.getElementById("intelMarket").textContent = `地合い ${m.regime || "-"} · 走査 ${m.universe || "-"}銘柄 · 候補 ${((day.review && day.review.length) || (m.top_candidates || []).length)}件`;
+      const names = (day.review && day.review.length) ? day.review : (m.top_candidates || []);
+      document.getElementById("intelTop").innerHTML = names.map(c =>
+        `<li><span>${ylink(c.code, c.name, c.yahoo_url)}</span><span class="muted">${c.score}点 ${c.outcome || ""}</span></li>`
+      ).join("") || "<li class='muted'>なし</li>";
+      document.getElementById("intelX").textContent = x.summary || "";
+      const themeSel = document.getElementById("xThemeFilter");
+      const keep = themeSel.value;
+      const themes = (x.themes || []).map(t => t.theme);
+      themeSel.innerHTML = '<option value="">テーマすべて</option>' + themes.map(t => `<option value="${t}">${t}</option>`).join("");
+      if ([...themeSel.options].some(o => o.value === keep)) themeSel.value = keep;
+      const theme = themeSel.value;
+      const xitems = (x.items || []).filter(it => !theme || it.theme === theme);
+      document.getElementById("intelXItems").innerHTML = xitems.length ? xitems.map(it =>
+        `<li><span>${ylink(it.code, it.name, it.yahoo_url)}</span><span class="muted">${it.theme} · ${it.count}件</span></li>`
+      ).join("") : "<li class='muted'>なし</li>";
+    };
+    reviewBody.onclick = (e) => {
+      const b = e.target.closest("tr[data-day]");
+      if (!b) return;
+      sel = b.getAttribute("data-day");
       paint();
-      document.getElementById("xThemeFilter").onchange = paint;
-    }
+    };
+    paint();
+    document.getElementById("xThemeFilter").onchange = paint;
     const idx = window.STATE.search_index || [];
     const box = document.getElementById("searchResults");
     const searchInput = document.getElementById("stockSearch");
