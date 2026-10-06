@@ -79,7 +79,7 @@
     <section class="grid2">
       <article class="card">
         <h2>保有ポジション</h2>
-        <table><thead><tr><th>銘柄</th><th>株数</th><th>取得</th><th>現在</th><th>損益</th></tr></thead><tbody id="posBody"></tbody></table>
+        <table><thead><tr><th>銘柄</th><th>株数</th><th>取得</th><th>現在<div id="priceAt" class="muted"></div></th><th>損益</th></tr></thead><tbody id="posBody"></tbody></table>
       </article>
       <article class="card">
         <h2>購入履歴 <span class="muted" id="buyCount"></span></h2>
@@ -178,6 +178,9 @@
       `<div class="card"><div class="dot" style="background:${a.color}"></div><div style="font-weight:600;font-size:13px">${a.name}</div><div class="muted" style="margin:8px 0 0;line-height:1.5">${summaries[a.id] || "未実行"}</div></div>`
     ).join("");
     const positions = p.positions || [];
+    const priceAt = document.getElementById("priceAt");
+    const stamped = p.price_updated_at || last.price_updated_at || "";
+    if (priceAt) priceAt.textContent = stamped ? stamped.slice(5, 16) : "";
     document.getElementById("posBody").innerHTML = positions.length ? positions.map(pos => {
       const pnl = (pos.current_price - pos.buy_price) * pos.shares;
       const cls = pnl >= 0 ? "pos" : "neg";
