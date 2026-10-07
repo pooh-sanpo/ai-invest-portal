@@ -71,8 +71,8 @@
   </header>
   <main>
     <section class="kpis">
-      <article class="card"><div class="label">時価総額</div><div class="value" id="equity">-</div></article>
-      <article class="card"><div class="label">現金</div><div class="value" id="cash">-</div></article>
+      <article class="card"><div class="label">時価総額</div><div class="value" id="equity" style="color:#e2e8f0">-</div></article>
+      <article class="card"><div class="label">現金</div><div class="value" id="cash" style="color:#fbbf24">-</div></article>
       <article class="card"><div class="label">保有</div><div class="value" id="posCount">-</div></article>
       <article class="card"><div class="label">開始来収支</div><div class="value" id="pnlTotal">-</div><div class="muted" id="pnlDetail"></div></article>
     </section>
@@ -224,7 +224,9 @@
     document.getElementById("posCount").textContent = ((p.positions || []).length) + "件";
     const pnl = last.pnl || {};
     const total = pnl.total;
-    document.getElementById("pnlTotal").textContent = (total == null) ? "-" : ((total >= 0 ? "+" : "") + yen(total));
+    const pnlEl = document.getElementById("pnlTotal");
+    pnlEl.textContent = (total == null) ? "-" : ((total >= 0 ? "+" : "") + yen(total));
+    pnlEl.style.color = (total == null || total >= 0) ? "#34d399" : "#fb7185";
     document.getElementById("pnlDetail").textContent = last.session
       ? ("次約定 " + last.session.fill_at + " " + last.session.label)
       : "";
