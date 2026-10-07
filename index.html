@@ -192,8 +192,7 @@
         const pts = vals.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(1)).join(" ");
         marks += `<polyline fill="none" stroke="${color}" stroke-width="2" points="${pts}" />`;
         vals.forEach((v, i) => {
-          const label = yenText(v, spec.key === "pnl");
-          marks += `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.6" fill="${color}"><title>${list[i].at} ${spec.name} ${label}</title></circle>`;
+          marks += `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.6" fill="${color}" />`;
         });
       });
       const zero = (loR < 0 && hiR > 0) ? `<line x1="${left}" y1="${yR(0).toFixed(1)}" x2="${w - right}" y2="${yR(0).toFixed(1)}" stroke="#334155" />` : "";
@@ -203,7 +202,59 @@
       }).join("");
       const t0 = String(list[0].at).slice(5, 16);
       const t1 = String(list[list.length - 1].at).slice(5, 16);
-      svg.innerHTML = `${legend}${zero}${marks}<text x="6" y="${top + 10}" fill="#94a3b8" font-size="11">${yenText(Math.max.apply(null, equity.concat(cash)), false)}</text><text x="6" y="${h - bottom}" fill="#94a3b8" font-size="11">${yenText(Math.min.apply(null, cash.concat(equity)), false)}</text><text x="${w - 6}" y="${top + 10}" fill="#34d399" font-size="11" text-anchor="end">${yenText(Math.max.apply(null, pnl), true)}</text><text x="${w - 6}" y="${h - bottom}" fill="#34d399" font-size="11" text-anchor="end">${yenText(Math.min(0, Math.min.apply(null, pnl)), true)}</text><text x="${left}" y="${h - 4}" fill="#94a3b8" font-size="11">${t0}</text><text x="${w - right}" y="${h - 4}" fill="#94a3b8" font-size="11" text-anchor="end">${t1}</text>`;
+      svg.innerHTML = `${legend}${zero}${marks}<text x="6" y="${top + 10}" fill="#94a3b8" font-size="11">${yenText(Math.max.apply(null, equity.concat(cash)), false)}</text><text x="6" y="${h - bottom}" fill="#94a3b8" font-size="11">${yenText(Math.min.apply(null, cash.concat(equity)), false)}</text><text x="${w - 6}" y="${top + 10}" fill="#34d399" font-size="11" text-anchor="end">${yenText(Math.max.apply(null, pnl), true)}</text><text x="${w - 6}" y="${h - bottom}" fill="#34d399" font-size="11" text-anchor="end">${yenText(Math.min(0, Math.min.apply(null, pnl)), true)}</text><text x="${left}" y="${h - 4}" fill="#94a3b8" font-size="11">${t0}</text><text x="${w - right}" y="${h - 4}" fill="#94a3b8" font-size="11" text-anchor="end">${t1}</text><g id="hoverTip" visibility="hidden" pointer-events="none"><line id="hoverLine" stroke="#64748b" stroke-dasharray="3 3" /><rect id="hoverBox" rx="6" fill="#020617" stroke="#334155" /><text id="hoverWhen" fill="#94a3b8" font-size="11"></text><text id="hoverEq" fill="#e2e8f0" font-size="12"></text><text id="hoverCash" fill="#fbbf24" font-size="12"></text><text id="hoverPnl" fill="#34d399" font-size="12"></text></g>`;
+      const tip = document.getElementById("hoverTip");
+      const hoverLine = document.getElementById("hoverLine");
+      const hoverBox = document.getElementById("hoverBox");
+      const hoverWhen = document.getElementById("hoverWhen");
+      const hoverEq = document.getElementById("hoverEq");
+      const hoverCash = document.getElementById("hoverCash");
+      const hoverPnl = document.getElementById("hoverPnl");
+      const boxW = 168, boxH = 74;
+      const place = (index, px, py) => {
+        const row = list[index];
+        hoverLine.setAttribute("x1", x(index));
+        hoverLine.setAttribute("x2", x(index));
+        hoverLine.setAttribute("y1", top);
+        hoverLine.setAttribute("y2", h - bottom);
+        hoverWhen.textContent = String(row.at).slice(5, 16);
+        hoverEq.textContent = "時価総額 " + yenText(row.equity, false);
+        hoverCash.textContent = "現金 " + yenText(row.cash, false);
+        hoverPnl.textContent = "開始来収支 " + yenText(row.pnl, true);
+        hoverPnl.setAttribute("fill", Number(row.pnl) < 0 ? "#fb7185" : "#34d399");
+        let bx = px + 14;
+        let by = py - 16;
+        if (bx + boxW > w - 4) bx = px - boxW - 14;
+        if (bx < 4) bx = 4;
+        if (by < 4) by = 4;
+        if (by + boxH > h - 4) by = h - boxH - 4;
+        hoverBox.setAttribute("x", bx);
+        hoverBox.setAttribute("y", by);
+        hoverBox.setAttribute("width", boxW);
+        hoverBox.setAttribute("height", boxH);
+        [hoverWhen, hoverEq, hoverCash, hoverPnl].forEach((node, i) => {
+          node.setAttribute("x", bx + 10);
+          node.setAttribute("y", by + 16 + i * 16);
+        });
+        tip.setAttribute("visibility", "visible");
+      };
+      const nearest = (clientX, clientY) => {
+        const pt = svg.createSVGPoint();
+        pt.x = clientX;
+        pt.y = clientY;
+        const ctm = svg.getScreenCTM();
+        if (!ctm) return;
+        const loc = pt.matrixTransform(ctm.inverse());
+        let best = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < list.length; i++) {
+          const dist = Math.abs(x(i) - loc.x);
+          if (dist < bestDist) { best = i; bestDist = dist; }
+        }
+        place(best, loc.x, loc.y);
+      };
+      svg.onmousemove = (ev) => nearest(ev.clientX, ev.clientY);
+      svg.onmouseleave = () => tip.setAttribute("visibility", "hidden");
     }
     const yen = (n) => (n == null || n === "") ? "-" : Math.floor(Number(n)).toLocaleString("ja-JP") + "円";
     const ylink = (code, name, url) => {
